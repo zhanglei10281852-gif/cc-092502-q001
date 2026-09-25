@@ -114,7 +114,11 @@ def close_connection() -> None:
 
 
 def init_db() -> None:
-    connection().executescript(SCHEMA)
+    from app.fieldwork.store import FIELDWORK_SCHEMA
+
+    db = connection()
+    db.executescript(SCHEMA)
+    db.executescript(FIELDWORK_SCHEMA)
 
 
 @contextmanager

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, Query
 
 from app.database import close_connection, connection, init_db
+from app.deps import current_user
+from app.fieldwork.routes import router as fieldwork_router
 from app.schemas import JobCreate, JobFinish, LoginRequest, MemberCreate, ProjectCreate, UserCreate
 from app.service import ResearchService, ServiceError
 
@@ -18,6 +20,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="考古研究协作基础服务", version="1.0.0", lifespan=lifespan)
+app.include_router(fieldwork_router)
 
 
 @app.exception_handler(ServiceError)
@@ -25,12 +28,6 @@ async def handle_service_error(request, exc: ServiceError):
     del request
     from fastapi.responses import JSONResponse
     return JSONResponse(status_code=exc.status, content={"error": {"code": exc.code, "message": exc.message}})
-
-
-def current_user(authorization: str = Header(...)):
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(401, "缺少 Bearer 会话")
-    return ResearchService().authenticate(authorization[7:])
 
 
 @app.get("/")
@@ -65,13 +62,28 @@ def add_member(project_id: int, payload: MemberCreate, user=Depends(current_user
 
 
 @app.get("/api/audit")
-def list_audit(project_id: int | None = Query(default=None), user=Depends(current_user)):
+def list_audit(
+    project_id: int | None = Query(default=None),
+    resource_type: str | None = Query(default=None),
+    resource_id: str | None = Query(default=None),
+    user=Depends(current_user),
+):
     service = ResearchService()
+    clauses, params = [], []
     if project_id is not None:
-        service.require_role(project_id, user["id"], {"owner", "researcher", "reviewer", "viewer"})
-        rows = connection().execute("SELECT * FROM audit_events WHERE project_id=? ORDER BY id", (project_id,)).fetchall()
+        service.require_role(project_id, user["id"], {"owner", "researcher", "recorder", "reviewer", "viewer"})
+        clauses.append("project_id=?")
+        params.append(project_id)
     else:
-        rows = connection().execute("SELECT * FROM audit_events WHERE actor_id=? ORDER BY id", (user["id"],)).fetchall()
+        clauses.append("actor_id=?")
+        params.append(user["id"])
+    if resource_type is not None:
+        clauses.append("resource_type=?")
+        params.append(resource_type)
+    if resource_id is not None:
+        clauses.append("resource_id=?")
+        params.append(resource_id)
+    rows = connection().execute(f"SELECT * FROM audit_events WHERE {' AND '.join(clauses)} ORDER BY id", params).fetchall()
     return {"data": [dict(row) for row in rows]}
 
 
