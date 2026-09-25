@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 
 from app.database import close_connection, connection, init_db
+from app.field_store import init_field_db
 from app.schemas import JobCreate, JobFinish, LoginRequest, MemberCreate, ProjectCreate, UserCreate
 from app.service import ResearchService, ServiceError
 
@@ -13,6 +14,7 @@ from app.service import ResearchService, ServiceError
 async def lifespan(app: FastAPI):
     del app
     init_db()
+    init_field_db(connection())
     yield
     close_connection()
 
@@ -24,7 +26,10 @@ app = FastAPI(title="考古研究协作基础服务", version="1.0.0", lifespan=
 async def handle_service_error(request, exc: ServiceError):
     del request
     from fastapi.responses import JSONResponse
-    return JSONResponse(status_code=exc.status, content={"error": {"code": exc.code, "message": exc.message}})
+    content: dict = {"error": {"code": exc.code, "message": exc.message}}
+    if exc.details:
+        content["error"]["details"] = exc.details
+    return JSONResponse(status_code=exc.status, content=content)
 
 
 def current_user(authorization: str = Header(...)):
@@ -88,3 +93,8 @@ def claim_job(worker_id: str = Query(..., min_length=1)):
 @app.post("/api/jobs/{job_id}/finish")
 def finish_job(job_id: int, payload: JobFinish):
     return ResearchService().finish(job_id, payload.worker_id, payload.result)
+
+
+from app.field_routes import router as field_router  # noqa: E402
+
+app.include_router(field_router)

@@ -10,8 +10,8 @@ from app.security import expiry, issue_token, password_hash, request_hash, sanit
 
 
 class ServiceError(Exception):
-    def __init__(self, code: str, message: str, status: int = 400):
-        self.code, self.message, self.status = code, message, status
+    def __init__(self, code: str, message: str, status: int = 400, *, details: dict[str, Any] | None = None):
+        self.code, self.message, self.status, self.details = code, message, status, details
         super().__init__(message)
 
 

@@ -14,10 +14,14 @@ def main() -> int:
     args = parser.parse_args()
     if args.command == "init-db":
         init_db()
+        from app.field_store import init_field_db
+        init_field_db(connection())
         print(json.dumps({"status": "initialized"}, ensure_ascii=False))
         return 0
     if args.command == "check-db":
         init_db()
+        from app.field_store import init_field_db
+        init_field_db(connection())
         db = connection()
         print(json.dumps({"integrity": db.execute("PRAGMA integrity_check").fetchone()[0], "foreign_keys": db.execute("PRAGMA foreign_keys").fetchone()[0], "tables": db.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0]}, ensure_ascii=False))
         return 0
